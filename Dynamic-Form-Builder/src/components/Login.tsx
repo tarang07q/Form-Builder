@@ -13,7 +13,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const validateInputs = () => {
     const newErrors: { [key: string]: string } = {};
@@ -27,7 +27,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       newErrors.rollNumber = "Roll Number should be at least 3 digits";
     }
 
-    // Name validation (for both login and registration)
+    // Name validation for both login and register
     if (!userData.name.trim()) {
       newErrors.name = "Name is required";
     } else if (userData.name.length < 2) {
@@ -43,7 +43,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setUserData((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
@@ -51,41 +50,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // For login, we need both roll number and name
-    if (!userData.rollNumber.trim() || !userData.name.trim()) {
-      const newErrors: { [key: string]: string } = {};
-      if (!userData.rollNumber.trim()) {
-        newErrors.rollNumber = "Roll Number is required";
-      }
-      if (!userData.name.trim()) {
-        newErrors.name = "Name is required";
-      }
-      setErrors(newErrors);
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      // Use both roll number and name for authentication
-      console.log("Logging in with:", userData);
-      const formData = await getForm(userData.rollNumber);
-      console.log("Login successful with roll number:", userData.rollNumber, "and name:", userData.name);
-      onLoginSuccess(formData);
-    } catch (error) {
-      console.error("Login error:", error);
-      setErrors((prev) => ({
-        ...prev,
-        submit: "Login failed. Please check your roll number and name or register first.",
-      }));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
+    setIsRegistering(false);
 
     if (!validateInputs()) {
       return;
@@ -94,19 +59,36 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     try {
-      console.log("Registering user with data:", userData);
-      const result = await createUser(userData);
-      console.log("Registration result:", result);
-
-      // After successful registration, get the form
       const formData = await getForm(userData.rollNumber);
-      console.log("Form fetched after registration:", formData);
       onLoginSuccess(formData);
     } catch (error) {
-      console.error("Registration error:", error);
       setErrors((prev) => ({
         ...prev,
-        submit: "Registration failed. Please try again with a different roll number.",
+        submit: "Login failed. Please check your credentials or register first.",
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsRegistering(true);
+
+    if (!validateInputs()) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await createUser(userData);
+      const formData = await getForm(userData.rollNumber);
+      onLoginSuccess(formData);
+    } catch (error) {
+      setErrors((prev) => ({
+        ...prev,
+        submit: "Registration failed. Please try again.",
       }));
     } finally {
       setIsLoading(false);
@@ -117,28 +99,28 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     <div className="login-container">
       <h2 className="login-title">Student Portal</h2>
       <p className="login-description">
-        Welcome to the Student Portal. Please {mode === 'login' ? 'login to' : 'register for'} your account.
+        Welcome to the Student Portal. Please enter your details to continue.
       </p>
-      <div className="login-mode-toggle">
+
+      <div className="auth-tabs">
         <button
-          className={`mode-button ${mode === 'login' ? 'active' : ''}`}
-          onClick={() => setMode('login')}
-          disabled={isLoading}
+          className={`auth-tab ${!isRegistering ? 'active' : ''}`}
+          onClick={() => setIsRegistering(false)}
         >
           Login
         </button>
         <button
-          className={`mode-button ${mode === 'register' ? 'active' : ''}`}
-          onClick={() => setMode('register')}
-          disabled={isLoading}
+          className={`auth-tab ${isRegistering ? 'active' : ''}`}
+          onClick={() => setIsRegistering(true)}
         >
           Register
         </button>
       </div>
-      <form onSubmit={mode === 'login' ? handleLogin : handleRegister}>
+
+      <form onSubmit={isRegistering ? handleRegister : handleLogin}>
         <div className="form-group">
           <label htmlFor="rollNumber" className="form-label">
-            Roll Number <span style={{ color: "#e74c3c" }}>*</span>
+            Roll Number <span className="required">*</span>
           </label>
           <input
             type="text"
@@ -146,18 +128,17 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             name="rollNumber"
             value={userData.rollNumber}
             onChange={handleChange}
-            className={`login-input ${errors.rollNumber ? "error" : ""}`}
+            className={`form-input ${errors.rollNumber ? "error" : ""}`}
             placeholder="Enter your roll number (without RA)"
-            required
           />
           {errors.rollNumber && (
-            <div className="login-error">{errors.rollNumber}</div>
+            <div className="error-message">{errors.rollNumber}</div>
           )}
         </div>
 
         <div className="form-group">
           <label htmlFor="name" className="form-label">
-            Name <span style={{ color: "#e74c3c" }}>*</span>
+            Full Name <span className="required">*</span>
           </label>
           <input
             type="text"
@@ -165,15 +146,16 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             name="name"
             value={userData.name}
             onChange={handleChange}
-            className={`login-input ${errors.name ? "error" : ""}`}
+            className={`form-input ${errors.name ? "error" : ""}`}
             placeholder="Enter your full name"
-            required
           />
-          {errors.name && <div className="login-error">{errors.name}</div>}
+          {errors.name && (
+            <div className="error-message">{errors.name}</div>
+          )}
         </div>
 
         {errors.submit && (
-          <div className="login-error" style={{ marginBottom: "1.5rem" }}>
+          <div className="error-message" style={{ marginBottom: "1rem" }}>
             {errors.submit}
           </div>
         )}
@@ -181,21 +163,45 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         <button
           type="submit"
           disabled={isLoading}
-          className="login-button login-button-primary"
+          className="submit-button"
         >
           {isLoading
-            ? (mode === 'login' ? "Logging in..." : "Registering...")
-            : (mode === 'login' ? "Login" : "Register")}
+            ? isRegistering
+              ? "Creating Account..."
+              : "Logging in..."
+            : isRegistering
+              ? "Create Account"
+              : "Login"}
         </button>
 
-        <div className="login-note">
-          {mode === 'login'
-            ? "Don't have an account? Switch to Register mode."
-            : "Already have an account? Switch to Login mode."}
-        </div>
+        <p className="switch-mode">
+          {isRegistering ? (
+            <>
+              Already have an account?{" "}
+              <button
+                type="button"
+                className="switch-button"
+                onClick={() => setIsRegistering(false)}
+              >
+                Login here
+              </button>
+            </>
+          ) : (
+            <>
+              Don't have an account?{" "}
+              <button
+                type="button"
+                className="switch-button"
+                onClick={() => setIsRegistering(true)}
+              >
+                Register here
+              </button>
+            </>
+          )}
+        </p>
       </form>
     </div>
   );
 };
 
-export default Login;
+export default Login; 
